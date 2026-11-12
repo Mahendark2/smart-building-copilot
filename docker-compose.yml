@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sbc
+      POSTGRES_PASSWORD: sbc
+      POSTGRES_DB: sbc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sbc"]
+      interval: 5s
+      retries: 10
+
+  simulator:
+    build: .
+    command: python -m sbc.simulator --name SBC-Controller --instance 1001
+    environment:
+      SIM_TICK: "2"
+      FAULTS: ${FAULTS:-3:stuck_damper,5:sensor_drift}
+
+  gateway:
+    build: .
+    command: python -m sbc.gateway --name SBC-Gateway --instance 1002
+    environment:
+      CONTROLLER: simulator:47808
+      POLL_SECONDS: "5"
+      DATABASE_URL: postgresql+psycopg2://sbc:sbc@db:5432/sbc
+    depends_on:
+      db:
+        condition: service_healthy
+      simulator:
+        condition: service_started
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uvicorn sbc.api:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg2://sbc:sbc@db:5432/sbc
+      ROOT_PATH: /api
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      replicas: 3
+    restart: unless-stopped
+
+  assistant:
+    build: .
+    command: gunicorn -b 0.0.0.0:5000 -w 2 --timeout 120 sbc.assistant:app
+    environment:
+      API_URL: http://nginx/api
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    restart: unless-stopped
+
+  nginx:
+    build: ./web
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      - api
+      - assistant
+
+volumes:
+  pgdata:
