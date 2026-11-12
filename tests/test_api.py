@@ -34,7 +34,7 @@ def test_faults_found_in_the_right_zones(filled_db):
     assert (3, "stuck_damper") in kinds
     assert (2, "fan_off_while_occupied") in kinds
     assert (5, "supply_sensor_drift") in kinds
-    assert not [f for f in found if f["zone"] in (1, 4, 6) and f["severity"] == "high"]
+    assert not [f for f in found if f["zone"] in (1, 4, 6) and f["source"] == "rule"]
 
 
 def test_zone_summary(filled_db):

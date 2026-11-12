@@ -39,6 +39,20 @@ The Isolation Forest compares every zone with the others and flags one that
 looks different, even when no rule matches. If a rule already flagged a zone,
 the ML result is hidden so the list does not repeat itself.
 
+## Why compare drift with the rest of the building?
+
+The first version flagged healthy zones after a restart, because every zone's
+supply temperature settles at the same time. A real drifting sensor moves away
+from the others, so the rule now looks at the gap between a zone and the
+building's median. Things that hit every zone at once cancel out.
+`tests/test_faults.py` checks both cases.
+
+## Why does ML need 5 odd readings in a row?
+
+With one odd reading, healthy zones were flagged now and then, which teaches
+operators to ignore alarms. Needing all of the last 5 readings to look unusual
+removed those false alarms in testing, while the faulty zone was still caught.
+
 ## Why Isolation Forest?
 
 It needs no labelled fault data (we have none), trains in milliseconds on a few

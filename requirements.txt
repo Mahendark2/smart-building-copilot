@@ -9,3 +9,4 @@ requests==2.34.2
 scikit-learn==1.9.1
 numpy==2.5.3
 openai==3.49.0
+a2wsgi==1.10.10

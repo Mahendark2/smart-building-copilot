@@ -7,6 +7,29 @@ English. An LLM agent answers by calling the building API as tools.
 
 ![dashboard](docs/dashboard.png)
 
+## Quick start (one command, no Docker)
+
+You need **Python 3.12 or 3.13**. Nothing else: it uses SQLite and the
+dashboard is already built.
+
+```bash
+pip install -r requirements.txt
+python run.py
+```
+
+Open **http://localhost:8080**. Values appear within a few seconds, the stuck
+damper in zone 3 within about a minute, and the zone 5 sensor drift within about
+two minutes.
+
+- **Windows:** the same commands in PowerShell. If you see BACnet or socket
+  errors, run `python run.py --no-bacnet`. Everything else stays the same; the
+  values just skip the BACnet hop.
+- **Chat:** copy `.env.example` to `.env` and add an `LLM_API_KEY`. Any
+  OpenAI-compatible provider works. For a free one, make a Groq key and set
+  `LLM_BASE_URL=https://api.groq.com/openai/v1` and `LLM_MODEL` to a Groq model
+  that supports tool use. Restart `python run.py` after changing `.env`.
+- **Stop:** Ctrl+C. Data stays in `data/sbc.db`. Delete that file to start fresh.
+
 ## How it fits together
 
 ```
@@ -28,8 +51,9 @@ English. An LLM agent answers by calling the building API as tools.
 | API | `sbc/api.py` | FastAPI. Latest values, history, zone summaries, faults. Keeps no state, so 3 copies run behind Nginx. |
 | Fault detection | `sbc/faults.py` | Rules for known faults, plus an Isolation Forest that flags zones that look unlike the rest. |
 | Assistant | `sbc/assistant.py` | Flask. Sends the question and 4 tools to the LLM, runs the tools it asks for, loops until it can answer (up to 6 steps). |
-| Dashboard | `web/` | React and Vite. Live zone cards, a fault list and a chat panel. |
-| Tests | `tests/` | 13 Pytest tests, including the tool loop with a fake LLM. Run on SQLite and PostgreSQL in CI. |
+| Dashboard | `web/` | React and Vite. Live zone cards, a fault list and a chat panel. A built copy is in `web/dist`. |
+| Launcher | `run.py` | Starts everything on one port with SQLite, for running on a laptop. |
+| Tests | `tests/` | 15 Pytest tests, including the tool loop with a fake LLM. Run on SQLite and PostgreSQL in CI. |
 
 ### The points
 
@@ -44,9 +68,9 @@ speed, fan status and occupancy. Zone `z` uses BACnet instances `z*100 + 1` to
 | --- | --- |
 | Stuck damper | Damper under 5% while the valve is over 80% open and the room is 1.5 C over setpoint |
 | Fan off while occupied | Occupied but the fan is off for the whole window |
-| Supply sensor drift | Supply air rises over 0.5 C across 30 readings while the valve stays steady |
+| Supply sensor drift | Supply air rises over 0.5 C more than the building median across 30 readings, while the valve stays steady |
 | High CO2 | Over 1000 ppm |
-| Unusual behaviour | Isolation Forest marks most of a zone's last 5 readings as outliers |
+| Unusual behaviour | Isolation Forest marks all of a zone's last 5 readings as outliers |
 
 Switch faults on with `FAULTS=3:stuck_damper,5:sensor_drift` (also `fan_off`, `high_co2`).
 
