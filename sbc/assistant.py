@@ -17,7 +17,7 @@ MAX_STEPS = int(os.getenv("MAX_TOOL_STEPS", "6"))
 # All three speak the same OpenAI chat API, so only the address and model change.
 PROVIDERS = {
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-               "model": "gemini-2.5-flash"},
+               "model": "gemini-3.8-flash"},
     "ollama": {"base_url": "http://ollama:11434/v1", "model": "qwen2.5:3b"},
     "openai": {"base_url": None, "model": "gpt-4o-mini"},
 }
