@@ -60,11 +60,19 @@ def rule_faults(zone, frame, ref_supply=None, window=10, drift_window=30):
     if len(supply) >= drift_window and len(ref) == len(supply):
         gap = [a - b for a, b in zip(supply, ref)]
         rise = slope(gap) * (len(gap) - 1)
-        if rise > 0.5 and np.std(valves) < 10:
+        offset = mean(gap)
+        steady = np.std(valves) < 10
+        if steady and rise > 0.5:
             out.append(fault(zone, "supply_sensor_drift", "medium",
                              f"Supply air temperature rose {rise:.1f} C more than the rest of the building "
                              f"over the last {len(supply)} readings while the valve stayed steady. "
                              f"The sensor may be drifting."))
+        elif steady and offset > 2.0 and np.std(gap) < 1.0:
+            # it already drifted and stopped: still wrong, just not moving
+            out.append(fault(zone, "supply_sensor_drift", "medium",
+                             f"Supply air reads {offset:.1f} C warmer than the rest of the building and has "
+                             f"stayed that way for {len(supply)} readings, while the valve is steady. "
+                             f"The sensor is likely out of calibration."))
     if not out and warm > 2:
         out.append(fault(zone, "too_warm", "low",
                          f"The room has been {warm:.1f} C above its cooling setpoint."))

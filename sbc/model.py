@@ -8,6 +8,7 @@ import math
 import random
 
 FAULT_TYPES = ("stuck_damper", "sensor_drift", "fan_off", "high_co2")
+DRIFT_MAX = 4.0  # degrees C a drifting supply sensor ends up off by
 
 
 class Zone:
@@ -62,7 +63,8 @@ class Zone:
         self.humidity += (50 - self.humidity) * 0.02 + self.rnd.gauss(0, 0.2)
 
         if self.fault == "sensor_drift":
-            self.drift += 0.05
+            # a real sensor drifts a few degrees and then sits there
+            self.drift = min(self.drift + 0.05, DRIFT_MAX)
         self.supply = supply + self.drift + self.rnd.gauss(0, 0.05)
         self.ret = self.temp + 0.8 + self.rnd.gauss(0, 0.05)
 
