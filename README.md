@@ -24,10 +24,10 @@ two minutes.
 - **Windows:** the same commands in PowerShell. If you see BACnet or socket
   errors, run `python run.py --no-bacnet`. Everything else stays the same; the
   values just skip the BACnet hop.
-- **Chat:** copy `.env.example` to `.env` and add an `LLM_API_KEY`. Any
-  OpenAI-compatible provider works. For a free one, make a Groq key and set
-  `LLM_BASE_URL=https://api.groq.com/openai/v1` and `LLM_MODEL` to a Groq model
-  that supports tool use. Restart `python run.py` after changing `.env`.
+- **Chat:** copy `.env.example` to `.env` and paste a free Gemini key
+  (https://aistudio.google.com/apikey) into `LLM_API_KEY`. No key? Install
+  Ollama, run `ollama pull qwen2.5:3b`, and set `LLM_PROVIDER=ollama`. Restart
+  `python run.py` after changing `.env`; it prints which model it is using.
 - **Stop:** Ctrl+C. Data stays in `data/sbc.db`. Delete that file to start fresh.
 
 ## How it fits together
@@ -77,17 +77,23 @@ Switch faults on with `FAULTS=3:stuck_damper,5:sensor_drift` (also `fan_off`, `h
 ## Run it with Docker
 
 ```bash
-cp .env.example .env        # add LLM_API_KEY to use the chat
+cp .env.example .env        # paste a free Gemini key into LLM_API_KEY
 docker compose up --build
 ```
+
+No key? Set `LLM_PROVIDER=ollama` in `.env` and run
+`docker compose --profile local-llm up --build`. It adds an Ollama container and
+downloads `qwen2.5:3b` (about 2 GB) the first time.
 
 Open http://localhost:8080. The dashboard fills in after about 10 seconds.
 Check which API copy answered with `curl -i localhost:8080/api/health` and look at
 `X-Served-By`; repeat it and the name changes.
 
-The chat works with any OpenAI-compatible provider. Set `LLM_BASE_URL` for one
-that is not OpenAI (Groq, Together, a local Ollama at
-`http://host.docker.internal:11434/v1`, and so on).
+The chat works with any OpenAI-compatible provider. `LLM_PROVIDER` picks Gemini
+(default, free key), Ollama (local, no key) or OpenAI. `LLM_BASE_URL` and
+`LLM_MODEL` override them for anything else, such as Groq or vLLM.
+`scripts/mock_llm.py` is a scripted stand-in server (not AI) for testing the
+chain with no internet.
 
 ## Run it without Docker
 
@@ -104,7 +110,7 @@ CONTROLLER=127.0.0.1:47808 python -m sbc.gateway --instance 1002 --address 127.0
 
 # 2. API and assistant
 uvicorn sbc.api:app --port 8000
-LLM_API_KEY=... flask --app sbc.assistant run --port 5000
+LLM_API_KEY=... API_URL=http://localhost:8000 flask --app sbc.assistant run --port 5000
 
 # 3. dashboard
 cd web && npm install && npm run dev
@@ -134,6 +140,7 @@ Interactive docs at `/api/docs` when running behind Nginx, or `/docs` on the API
 
 ## More
 
+- [docs/LEARN.md](docs/LEARN.md): every part explained, a 5-minute demo and interview questions
 - [RUNBOOK.md](RUNBOOK.md): checking health and fixing common problems
 - [docs/aws.md](docs/aws.md): running it on an AWS EC2 instance
 - [docs/design-notes.md](docs/design-notes.md): why each choice was made

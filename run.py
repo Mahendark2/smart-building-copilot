@@ -46,6 +46,9 @@ def main():
     os.environ.setdefault("SIM_TICK", "1")
     os.environ.setdefault("POLL_SECONDS", "2")
     os.environ["API_URL"] = f"http://127.0.0.1:{opt.port}/api"
+    # Ollama's Docker address doesn't exist here; use the local install instead
+    if os.getenv("LLM_PROVIDER", "").lower() == "ollama":
+        os.environ.setdefault("LLM_BASE_URL", "http://localhost:11434/v1")
     env = dict(os.environ)
 
     from sbc import db
@@ -78,9 +81,10 @@ def main():
     else:
         print("web/dist is missing: run 'npm install && npm run build' in web/", flush=True)
 
-    llm = "set" if (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")) else "NOT set (chat will ask for a key)"
+    s = assistant.settings()
+    llm = f"{s['provider']} / {s['model']}" if s["key"] else "NOT set (add LLM_API_KEY to .env)"
     print(f"\n  Dashboard:  http://localhost:{opt.port}\n  API docs:   http://localhost:{opt.port}/api/docs"
-          f"\n  LLM key:    {llm}\n  Stop:       Ctrl+C\n", flush=True)
+          f"\n  LLM:        {llm}\n  Stop:       Ctrl+C\n", flush=True)
     try:
         uvicorn.run(app, host="127.0.0.1", port=opt.port, log_level="warning")
     finally:

@@ -39,10 +39,13 @@ The gateway is talking to the wrong device. Check `CONTROLLER=simulator:47808` i
 different ports (47808 and 47809), as in the README.
 
 **Chat answers "LLM not configured"**
-Set `LLM_API_KEY` in `.env`, then `docker compose up -d assistant`.
+Set `LLM_API_KEY` in `.env` (or `LLM_PROVIDER=ollama`), then `docker compose up -d assistant`.
+`curl localhost:8080/assistant/health` shows the provider and model in use.
 
 **Chat answers "LLM call failed"**
-Check the key, `LLM_BASE_URL` and `LLM_MODEL`. The model must support tool calling.
+Check the key, `LLM_PROVIDER`, `LLM_BASE_URL` and `LLM_MODEL`. The model must support tool calling.
+With Ollama, the first answer waits until the model download finishes
+(`docker compose logs ollama-pull`).
 
 **One API copy keeps crashing**
 `docker compose logs api` shows all copies. Nginx skips a copy that errors

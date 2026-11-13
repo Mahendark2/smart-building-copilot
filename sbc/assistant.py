@@ -2,7 +2,8 @@
 questions by calling tools that hit the building API.
 
 Run:  flask --app sbc.assistant run --port 5000
-Env:  LLM_API_KEY, LLM_BASE_URL (optional), LLM_MODEL, API_URL
+Env:  LLM_PROVIDER (gemini, ollama, openai), LLM_API_KEY, API_URL
+      LLM_BASE_URL and LLM_MODEL override the provider's defaults.
 """
 import json
 import os
@@ -11,8 +12,27 @@ import requests
 from flask import Flask, jsonify, request
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
-MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 MAX_STEPS = int(os.getenv("MAX_TOOL_STEPS", "6"))
+
+# All three speak the same OpenAI chat API, so only the address and model change.
+PROVIDERS = {
+    "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+               "model": "gemini-2.5-flash"},
+    "ollama": {"base_url": "http://ollama:11434/v1", "model": "qwen2.5:3b"},
+    "openai": {"base_url": None, "model": "gpt-4o-mini"},
+}
+
+
+def settings():
+    name = (os.getenv("LLM_PROVIDER") or "gemini").lower()
+    p = PROVIDERS.get(name, PROVIDERS["openai"])
+    return {
+        "provider": name,
+        "base_url": os.getenv("LLM_BASE_URL") or p["base_url"],
+        "model": os.getenv("LLM_MODEL") or p["model"],
+        # Ollama runs on your machine and needs no key, but the client wants a string
+        "key": os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ("ollama" if name == "ollama" else None),
+    }
 
 SYSTEM = """You are the Smart Building Copilot, an assistant for facility staff.
 The building has 6 zones, each with 12 HVAC points (temperatures, setpoints,
@@ -80,33 +100,39 @@ def run_tool(name, args):
 
 def make_client():
     from openai import OpenAI
-    key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not key:
+    s = settings()
+    if not s["key"]:
         return None
-    return OpenAI(api_key=key, base_url=os.getenv("LLM_BASE_URL") or None)
+    return OpenAI(api_key=s["key"], base_url=s["base_url"], timeout=90)
 
 
-def chat(messages, client):
+def chat(messages, client, model=None):
     """Multi-step tool loop: the model can call several tools, one after
     another, until it has what it needs to answer."""
     msgs = [{"role": "system", "content": SYSTEM}] + messages
     steps = []
-    for _ in range(MAX_STEPS):
-        resp = client.chat.completions.create(model=MODEL, messages=msgs, tools=TOOLS)
+    model = model or settings()["model"]
+    for step in range(MAX_STEPS):
+        resp = client.chat.completions.create(model=model, messages=msgs, tools=TOOLS)
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            return {"answer": msg.content, "steps": steps}
+            return {"answer": msg.content or "", "steps": steps}
 
+        # some providers leave the id empty, so make one up
+        calls = [(t.id or f"call_{step}_{i}", t) for i, t in enumerate(msg.tool_calls)]
         msgs.append({"role": "assistant", "content": msg.content or "",
-                     "tool_calls": [{"id": t.id, "type": "function",
+                     "tool_calls": [{"id": cid, "type": "function",
                                      "function": {"name": t.function.name,
-                                                  "arguments": t.function.arguments}}
-                                    for t in msg.tool_calls]})
-        for t in msg.tool_calls:
-            args = json.loads(t.function.arguments or "{}")
+                                                  "arguments": t.function.arguments or "{}"}}
+                                    for cid, t in calls]})
+        for cid, t in calls:
+            try:
+                args = json.loads(t.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
             result = run_tool(t.function.name, args)
             steps.append({"tool": t.function.name, "args": args})
-            msgs.append({"role": "tool", "tool_call_id": t.id, "content": json.dumps(result)})
+            msgs.append({"role": "tool", "tool_call_id": cid, "content": json.dumps(result)})
 
     return {"answer": "I needed too many steps to answer that. Try a more specific question.",
             "steps": steps}
@@ -117,7 +143,9 @@ app = Flask(__name__)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "llm_configured": bool(os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))}
+    s = settings()
+    return {"status": "ok", "provider": s["provider"], "model": s["model"],
+            "llm_configured": bool(s["key"])}
 
 
 @app.post("/chat")
@@ -131,8 +159,8 @@ def chat_route():
 
     client = make_client()
     if client is None:
-        return jsonify(error="LLM not configured. Set LLM_API_KEY (and LLM_BASE_URL for "
-                             "a non-OpenAI provider)."), 503
+        return jsonify(error="LLM not configured. Set LLM_API_KEY in .env, or use "
+                             "LLM_PROVIDER=ollama for a local model with no key."), 503
     try:
         return jsonify(chat(messages[-12:], client))
     except Exception as e:

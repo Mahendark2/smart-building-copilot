@@ -51,10 +51,30 @@ services:
     command: gunicorn -b 0.0.0.0:5000 -w 2 --timeout 120 sbc.assistant:app
     environment:
       API_URL: http://nginx/api
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_MODEL: ${LLM_MODEL:-}
     restart: unless-stopped
+
+  # Optional local LLM, no key needed. Start with:
+  #   docker compose --profile local-llm up --build
+  # and set LLM_PROVIDER=ollama in .env
+  ollama:
+    image: ollama/ollama
+    profiles: ["local-llm"]
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+  ollama-pull:
+    image: ollama/ollama
+    profiles: ["local-llm"]
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 5 && ollama pull ${LLM_MODEL:-qwen2.5:3b}"]
+    depends_on:
+      - ollama
 
   nginx:
     build: ./web
@@ -66,3 +86,4 @@ services:
 
 volumes:
   pgdata:
+  ollama:
