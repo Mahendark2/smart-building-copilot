@@ -17,7 +17,7 @@ MAX_STEPS = int(os.getenv("MAX_TOOL_STEPS", "6"))
 # All three speak the same OpenAI chat API, so only the address and model change.
 PROVIDERS = {
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-               "model": "gemini-flash-latest,gemini-3.5-flash-lite,gemini-flash-lite-latest"},
+               "model": "gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3-flash-preview,gemini-flash-latest"},
     "ollama": {"base_url": "http://ollama:11434/v1", "model": "qwen2.5:3b"},
     "openai": {"base_url": None, "model": "gpt-4o-mini"},
 }
@@ -128,6 +128,24 @@ def ask(client, models, msgs):
     raise RuntimeError(f"every model was busy or unavailable. Last error: {last}")
 
 
+def assistant_turn(msg, calls):
+    """The model's tool-call message, to send back on the next step.
+    Gemini adds a thought_signature (in extra_content) and refuses the next
+    step if it is missing, so we keep any extra fields the provider sent."""
+    raw = msg.model_dump(exclude_none=True) if hasattr(msg, "model_dump") else {}
+    raw_calls = raw.get("tool_calls") or [{} for _ in calls]
+    out = {"role": "assistant", "content": msg.content or "", "tool_calls": []}
+    if raw.get("extra_content"):
+        out["extra_content"] = raw["extra_content"]
+    for (cid, t), rc in zip(calls, raw_calls):
+        tc = {"id": cid, "type": "function",
+              "function": {"name": t.function.name, "arguments": t.function.arguments or "{}"}}
+        if rc.get("extra_content"):
+            tc["extra_content"] = rc["extra_content"]
+        out["tool_calls"].append(tc)
+    return out
+
+
 def chat(messages, client, models=None):
     """Multi-step tool loop: the model can call several tools, one after
     another, until it has what it needs to answer."""
@@ -144,11 +162,7 @@ def chat(messages, client, models=None):
 
         # some providers leave the id empty, so make one up
         calls = [(t.id or f"call_{step}_{i}", t) for i, t in enumerate(msg.tool_calls)]
-        msgs.append({"role": "assistant", "content": msg.content or "",
-                     "tool_calls": [{"id": cid, "type": "function",
-                                     "function": {"name": t.function.name,
-                                                  "arguments": t.function.arguments or "{}"}}
-                                    for cid, t in calls]})
+        msgs.append(assistant_turn(msg, calls))
         for cid, t in calls:
             try:
                 args = json.loads(t.function.arguments or "{}")

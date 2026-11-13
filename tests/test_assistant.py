@@ -107,3 +107,34 @@ def test_all_models_busy_gives_clear_error():
 def test_model_list_from_env(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "a, b ,c")
     assert assistant.settings()["models"] == ["a", "b", "c"]
+
+
+class GeminiLike:
+    """Returns real openai message objects with a Gemini thought_signature,
+    and fails like Gemini does if the signature is not sent back."""
+
+    def __init__(self):
+        self.calls = 0
+        self.chat = NS(completions=NS(create=self.create))
+
+    def create(self, model, messages, tools):
+        from openai.types.chat import ChatCompletionMessage
+        self.calls += 1
+        if self.calls == 1:
+            msg = ChatCompletionMessage.model_validate({
+                "role": "assistant", "content": None,
+                "tool_calls": [{"id": "c1", "type": "function",
+                                "function": {"name": "get_faults", "arguments": "{}"},
+                                "extra_content": {"google": {"thought_signature": "sig123"}}}]})
+        else:
+            sent = [m for m in messages if m["role"] == "assistant"][-1]
+            assert sent["tool_calls"][0]["extra_content"]["google"]["thought_signature"] == "sig123"
+            msg = ChatCompletionMessage.model_validate({"role": "assistant", "content": "Done."})
+        return NS(choices=[NS(message=msg)])
+
+
+def test_thought_signature_is_sent_back(filled_db, monkeypatch):
+    monkeypatch.setattr(assistant, "call_api", fake_call_api)
+    out = assistant.chat([{"role": "user", "content": "faults?"}], GeminiLike(), ["gemini-x"])
+    assert out["answer"] == "Done."
+    assert [s["tool"] for s in out["steps"]] == ["get_faults"]
