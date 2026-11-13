@@ -17,7 +17,7 @@ MAX_STEPS = int(os.getenv("MAX_TOOL_STEPS", "6"))
 # All three speak the same OpenAI chat API, so only the address and model change.
 PROVIDERS = {
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-               "model": "gemini-3.8-flash"},
+               "model": "gemini-flash-latest,gemini-3.5-flash-lite,gemini-flash-lite-latest"},
     "ollama": {"base_url": "http://ollama:11434/v1", "model": "qwen2.5:3b"},
     "openai": {"base_url": None, "model": "gpt-4o-mini"},
 }
@@ -29,7 +29,8 @@ def settings():
     return {
         "provider": name,
         "base_url": os.getenv("LLM_BASE_URL") or p["base_url"],
-        "model": os.getenv("LLM_MODEL") or p["model"],
+        # one model, or several separated by commas: if one is busy we try the next
+        "models": [m.strip() for m in (os.getenv("LLM_MODEL") or p["model"]).split(",") if m.strip()],
         # Ollama runs on your machine and needs no key, but the client wants a string
         "key": os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ("ollama" if name == "ollama" else None),
     }
@@ -103,20 +104,43 @@ def make_client():
     s = settings()
     if not s["key"]:
         return None
-    return OpenAI(api_key=s["key"], base_url=s["base_url"], timeout=90)
+    # fail fast and move to the next model instead of waiting minutes
+    return OpenAI(api_key=s["key"], base_url=s["base_url"], timeout=30, max_retries=0)
 
 
-def chat(messages, client, model=None):
+BUSY = (404, 429, 500, 502, 503, 504)
+
+
+def ask(client, models, msgs):
+    """Try each model in turn. Returns (message, model that answered)."""
+    from openai import APIConnectionError, APIStatusError, APITimeoutError
+    last = None
+    for m in models:
+        try:
+            resp = client.chat.completions.create(model=m, messages=msgs, tools=TOOLS)
+            return resp.choices[0].message, m
+        except APIStatusError as e:
+            if e.status_code not in BUSY:
+                raise
+            last = f"{m}: {e.status_code} {getattr(e, 'message', e)}"
+        except (APITimeoutError, APIConnectionError) as e:
+            last = f"{m}: {e.__class__.__name__}"
+    raise RuntimeError(f"every model was busy or unavailable. Last error: {last}")
+
+
+def chat(messages, client, models=None):
     """Multi-step tool loop: the model can call several tools, one after
     another, until it has what it needs to answer."""
     msgs = [{"role": "system", "content": SYSTEM}] + messages
     steps = []
-    model = model or settings()["model"]
+    if isinstance(models, str):
+        models = [models]
+    models = models or settings()["models"]
+    used = None
     for step in range(MAX_STEPS):
-        resp = client.chat.completions.create(model=model, messages=msgs, tools=TOOLS)
-        msg = resp.choices[0].message
+        msg, used = ask(client, models, msgs)
         if not msg.tool_calls:
-            return {"answer": msg.content or "", "steps": steps}
+            return {"answer": msg.content or "", "steps": steps, "model": used}
 
         # some providers leave the id empty, so make one up
         calls = [(t.id or f"call_{step}_{i}", t) for i, t in enumerate(msg.tool_calls)]
@@ -135,7 +159,7 @@ def chat(messages, client, model=None):
             msgs.append({"role": "tool", "tool_call_id": cid, "content": json.dumps(result)})
 
     return {"answer": "I needed too many steps to answer that. Try a more specific question.",
-            "steps": steps}
+            "steps": steps, "model": used}
 
 
 app = Flask(__name__)
@@ -144,7 +168,7 @@ app = Flask(__name__)
 @app.get("/health")
 def health():
     s = settings()
-    return {"status": "ok", "provider": s["provider"], "model": s["model"],
+    return {"status": "ok", "provider": s["provider"], "models": s["models"],
             "llm_configured": bool(s["key"])}
 
 

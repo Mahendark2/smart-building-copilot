@@ -82,7 +82,7 @@ def main():
         print("web/dist is missing: run 'npm install && npm run build' in web/", flush=True)
 
     s = assistant.settings()
-    llm = f"{s['provider']} / {s['model']}" if s["key"] else "NOT set (add LLM_API_KEY to .env)"
+    llm = f"{s['provider']} / {', '.join(s['models'])}" if s["key"] else "NOT set (add LLM_API_KEY to .env)"
     print(f"\n  Dashboard:  http://localhost:{opt.port}\n  API docs:   http://localhost:{opt.port}/api/docs"
           f"\n  LLM:        {llm}\n  Stop:       Ctrl+C\n", flush=True)
     try:

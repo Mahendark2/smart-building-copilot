@@ -91,6 +91,10 @@ Question: **"Why is zone 3 so warm?"**
 
 The loop stops after 6 steps, so a confused model cannot loop forever.
 
+If a model is busy (Google's 503 "high demand" error) or retired (404), `ask()`
+moves straight to the next model in `LLM_MODEL`. Each call gives up after 30
+seconds instead of retrying for minutes, and the chat shows which model answered.
+
 **Why tools matter:** without tools, an LLM would invent a temperature. With
 tools, it can only talk about numbers it actually received.
 

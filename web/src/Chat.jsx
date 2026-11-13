@@ -24,9 +24,15 @@ export default function Chat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
       })
-      const data = await r.json()
+      const text = await r.text()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { error: `The assistant did not answer in time (HTTP ${r.status}). Try again.` }
+      }
       const reply = data.answer || data.error || 'No answer.'
-      setMsgs([...next, { role: 'assistant', content: reply, steps: data.steps || [] }])
+      setMsgs([...next, { role: 'assistant', content: reply, steps: data.steps || [], model: data.model }])
     } catch (e) {
       setMsgs([...next, { role: 'assistant', content: `Could not reach the assistant: ${e.message}` }])
     }
@@ -46,7 +52,7 @@ export default function Chat() {
           <div key={i} className={`msg ${m.role}`}>
             <p>{m.content}</p>
             {m.steps?.length > 0 && (
-              <small>Tools used: {m.steps.map(s => s.tool).join(' → ')}</small>
+              <small>Tools used: {m.steps.map(s => s.tool).join(' → ')}{m.model ? ` · ${m.model}` : ''}</small>
             )}
           </div>
         ))}

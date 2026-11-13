@@ -48,7 +48,7 @@ services:
 
   assistant:
     build: .
-    command: gunicorn -b 0.0.0.0:5000 -w 2 --timeout 120 sbc.assistant:app
+    command: gunicorn -b 0.0.0.0:5000 -w 2 --timeout 240 sbc.assistant:app
     environment:
       API_URL: http://nginx/api
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}

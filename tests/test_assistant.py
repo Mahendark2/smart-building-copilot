@@ -64,3 +64,46 @@ def test_chat_route_without_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     r = assistant.app.test_client().post("/chat", json={"question": "hi"})
     assert r.status_code == 503
+
+
+def busy_error(code=503):
+    import httpx
+    from openai import APIStatusError
+    resp = httpx.Response(code, request=httpx.Request("POST", "http://llm/v1/chat/completions"))
+    return APIStatusError("This model is currently experiencing high demand.", response=resp, body=None)
+
+
+class BusyThenOk:
+    """The first model always says it is busy; the second answers."""
+
+    def __init__(self):
+        self.tried = []
+        self.chat = NS(completions=NS(create=self.create))
+
+    def create(self, model, messages, tools):
+        self.tried.append(model)
+        if model == "busy-model":
+            raise busy_error()
+        return NS(choices=[NS(message=NS(content="All good.", tool_calls=None))])
+
+
+def test_falls_back_to_next_model_when_busy():
+    llm = BusyThenOk()
+    out = assistant.chat([{"role": "user", "content": "hi"}], llm, ["busy-model", "spare-model"])
+    assert out["answer"] == "All good."
+    assert out["model"] == "spare-model"
+    assert llm.tried == ["busy-model", "spare-model"]
+
+
+def test_all_models_busy_gives_clear_error():
+    llm = BusyThenOk()
+    try:
+        assistant.chat([{"role": "user", "content": "hi"}], llm, ["busy-model"])
+        assert False, "should have raised"
+    except RuntimeError as e:
+        assert "busy" in str(e)
+
+
+def test_model_list_from_env(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "a, b ,c")
+    assert assistant.settings()["models"] == ["a", "b", "c"]

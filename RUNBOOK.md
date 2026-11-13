@@ -44,6 +44,9 @@ Set `LLM_API_KEY` in `.env` (or `LLM_PROVIDER=ollama`), then `docker compose up 
 
 **Chat answers "LLM call failed"**
 Check the key, `LLM_PROVIDER`, `LLM_BASE_URL` and `LLM_MODEL`. The model must support tool calling.
+"every model was busy" means the provider is overloaded (Gemini's 503 "high demand").
+Wait a minute, or add more models to `LLM_MODEL`, separated by commas. The
+assistant tries them in order and the chat shows which one answered.
 With Ollama, the first answer waits until the model download finishes
 (`docker compose logs ollama-pull`).
 
