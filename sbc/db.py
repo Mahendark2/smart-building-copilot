@@ -23,6 +23,15 @@ class Point(Base):
     units = Column(String(16))
 
 
+class DemoFault(Base):
+    """Faults switched on from the dashboard's demo panel. The simulator reads
+    this table and breaks the matching zone, so detection can be shown live."""
+    __tablename__ = "demo_faults"
+    zone = Column(Integer, primary_key=True)
+    fault = Column(String(32), nullable=False)
+    set_at = Column(DateTime(timezone=True), nullable=False)
+
+
 class Reading(Base):
     __tablename__ = "readings"
     id = Column(Integer, primary_key=True)
@@ -116,3 +125,31 @@ def zone_frame(zone, since):
         for kind, ts, v in s.execute(q).all():
             data.setdefault(kind, []).append(v)
         return data
+
+
+def demo_faults():
+    """{zone: (fault, set_at)} for every zone that has a demo fault on."""
+    with session() as s:
+        return {r.zone: (r.fault, r.set_at) for r in s.execute(select(DemoFault)).scalars()}
+
+
+def set_demo_fault(zone, fault):
+    """Turn a fault on for a zone, or off when fault is None."""
+    with session() as s:
+        row = s.get(DemoFault, zone)
+        if fault is None:
+            if row:
+                s.delete(row)
+        elif row is None:
+            s.add(DemoFault(zone=zone, fault=fault, set_at=now()))
+        elif row.fault != fault:
+            row.fault, row.set_at = fault, now()
+        s.commit()
+
+
+def seed_demo_faults(faults):
+    """Start from the FAULTS setting, but only if nothing is stored yet."""
+    if demo_faults():
+        return
+    for z, f in faults.items():
+        set_demo_fault(z, f)

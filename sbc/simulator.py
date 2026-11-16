@@ -11,6 +11,7 @@ from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.local.analog import AnalogValueObject
 from bacpypes3.local.binary import BinaryValueObject
 
+from . import demo
 from .model import Building, parse_faults
 from .points import POINTS
 
@@ -53,7 +54,11 @@ async def main():
     parser = SimpleArgumentParser()
     args = parser.parse_args()
     tick = float(os.getenv("SIM_TICK", "2"))
-    building = Building(faults=parse_faults(os.getenv("FAULTS", "3:stuck_damper,5:sensor_drift")))
+    faults = parse_faults(os.getenv("FAULTS", "3:stuck_damper,5:sensor_drift"))
+    building = Building(faults=faults)
+    use_db = bool(os.getenv("DATABASE_URL"))
+    if use_db:
+        demo.seed(faults)
 
     app = Application.from_args(args)
     objs = make_objects()
@@ -61,8 +66,12 @@ async def main():
         app.add_object(o)
     print(f"simulator up with {len(objs)} points on {args.address or 'host'}", flush=True)
 
+    n = 0
     try:
         while True:
+            if use_db and n % 3 == 0:
+                demo.sync(building)
+            n += 1
             building.step()
             push(objs, building.values())
             await asyncio.sleep(tick)

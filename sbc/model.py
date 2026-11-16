@@ -111,6 +111,15 @@ class Building:
         for z in self.zones:
             z.step()
 
+    def set_faults(self, faults):
+        """faults: {zone: type}. Zones not listed go back to healthy."""
+        for z in self.zones:
+            f = faults.get(z.n)
+            if f != z.fault:
+                z.fault = f
+                if f != "sensor_drift":
+                    z.drift = 0.0  # a replaced or recalibrated sensor reads true again
+
     def values(self):
         out = {}
         for z in self.zones:

@@ -28,6 +28,15 @@ function Reply({ text }) {
   return out
 }
 
+function stepName(s) {
+  const a = s.args || {}
+  if (s.tool === 'get_faults') return 'Checked active faults'
+  if (s.tool === 'get_zone') return `Read zone ${a.zone ?? ''}`
+  if (s.tool === 'get_points') return a.zone ? `Read zone ${a.zone} points` : 'Read every point'
+  if (s.tool === 'get_history') return `Pulled history for ${a.name ?? 'a point'}`
+  return s.tool
+}
+
 const EXAMPLES = [
   'Are there any faults right now?',
   'Why is zone 3 so warm?',
@@ -70,6 +79,7 @@ export default function Chat() {
   return (
     <aside className="chat">
       <h2>Ask the copilot</h2>
+      <p className="quiet">It looks up live readings before it answers.</p>
       <div className="msgs">
         {msgs.length === 0 && (
           <div className="examples">
@@ -80,16 +90,18 @@ export default function Chat() {
           <div key={i} className={`msg ${m.role}`}>
             {m.role === 'assistant' ? <Reply text={m.content} /> : <p>{m.content}</p>}
             {m.steps?.length > 0 && (
-              <small>Tools used: {m.steps.map(s => s.tool).join(' → ')}</small>
+              <ol className="trace-steps">
+                {m.steps.map((s, j) => <li key={j}>{stepName(s)}</li>)}
+              </ol>
             )}
-            {m.model && <small>Model: {m.model}</small>}
+            {m.model && <small>Answered by {m.model}</small>}
           </div>
         ))}
         {busy && <div className="msg assistant"><p>Checking the building…</p></div>}
       </div>
       <form onSubmit={e => { e.preventDefault(); send() }}>
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="Ask about any zone…" />
-        <button disabled={busy}>Send</button>
+        <input value={text} onChange={e => setText(e.target.value)} placeholder="Ask about any zone" />
+        <button disabled={busy}>Ask</button>
       </form>
     </aside>
   )

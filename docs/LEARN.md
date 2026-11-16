@@ -192,7 +192,7 @@ restarted copy is found. Proof: call `/api/health` a few times and watch
 | --- | --- |
 | Stuck damper | The system is asking for cooling (valve over 80% open), the room is hot, but the air gate is closed (under 5%). The gate must be stuck. |
 | Fan off while occupied | People are in the room but no air is moving. |
-| Supply sensor drift | This zone's supply-air reading pulls away from the building's median supply-air reading by over 0.5 C across 30 readings, while its valve has not changed. Comparing with the median means a change that hits every zone at once (a restart, a hot afternoon) is not mistaken for drift. |
+| Supply sensor drift | This zone's supply-air reading pulls away from the building's median supply-air reading by over 0.5 C across 30 readings, while its valve has not changed. Comparing with the median means a change that hits every zone at once (a restart, a hot afternoon) is not mistaken for drift. It also fires when the sensor has already drifted and stopped: reading over 2 C warmer than the median, steadily. In the simulator the drift grows to 4 C and then stays there, like a real sensor out of calibration. |
 | High CO2 | Over 1000 ppm means stale air, not enough ventilation. |
 
 ### The machine learning part: Isolation Forest
@@ -292,6 +292,18 @@ docker compose --profile local-llm up --build
 
 It downloads the `qwen2.5:3b` model (about 2 GB) the first time. It needs about
 4 GB of free RAM and answers slower than Gemini.
+
+### Start fresh before a demo
+
+Readings are kept between runs, so the last 30 minutes can mix an old run with
+the new one, and the agent will describe that mix. Before a demo, wipe them:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Give it 3 minutes so every fault has enough readings.
 
 ### Stop
 

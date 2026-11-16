@@ -6,12 +6,14 @@ Run:  uvicorn sbc.api:app --port 8000
 import os
 import socket
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from . import db, faults
+from .model import FAULT_TYPES
 from .points import BY_NAME, ZONES
 
 
@@ -81,3 +83,29 @@ def detect(minutes):
 def get_faults(minutes: int = 30):
     minutes = max(1, min(minutes, 24 * 60))
     return {"window_minutes": minutes, "faults": detect(minutes)}
+
+
+# Demo controls: break a zone on purpose and watch the fault detection catch it.
+# The simulator picks the change up within a few seconds.
+
+class DemoFault(BaseModel):
+    fault: str | None = None
+
+
+@app.get("/demo/faults")
+def get_demo_faults():
+    on = db.demo_faults()
+    # SQLite hands times back without a timezone; they were saved in UTC
+    utc = lambda t: t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    return {"types": list(FAULT_TYPES),
+            "faults": [{"zone": z, "fault": f, "set_at": utc(t).isoformat()} for z, (f, t) in sorted(on.items())]}
+
+
+@app.put("/demo/faults/{zone}")
+def put_demo_fault(zone: int, body: DemoFault):
+    if not 1 <= zone <= ZONES:
+        raise HTTPException(404, f"zones are 1 to {ZONES}")
+    if body.fault is not None and body.fault not in FAULT_TYPES:
+        raise HTTPException(422, f"fault must be one of {', '.join(FAULT_TYPES)}, or null to fix the zone")
+    db.set_demo_fault(zone, body.fault)
+    return get_demo_faults()

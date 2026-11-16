@@ -25,3 +25,15 @@ def test_stuck_damper_makes_zone_warm():
 def test_parse_faults():
     assert parse_faults("3:stuck_damper, 5:sensor_drift") == {3: "stuck_damper", 5: "sensor_drift"}
     assert parse_faults("") == {}
+
+
+def test_set_faults_switches_zones_live():
+    b = Building(faults={3: "sensor_drift"})
+    for _ in range(20):
+        b.step()
+    z3 = b.zones[2]
+    assert z3.drift > 0
+    b.set_faults({2: "stuck_damper"})
+    assert z3.fault is None and z3.drift == 0
+    b.step()
+    assert b.zones[1].damper == 0.0

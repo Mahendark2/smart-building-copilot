@@ -25,3 +25,19 @@ def test_real_drift_is_found():
     fr = frames_from(Building(faults={5: "sensor_drift"}), 60)
     drift = [f for f in detect(fr) if f["type"] == "supply_sensor_drift"]
     assert [f["zone"] for f in drift] == [5]
+
+
+def test_drift_that_stopped_is_still_found():
+    # long enough for the drift to hit its cap and stop moving
+    fr = frames_from(Building(faults={5: "sensor_drift"}), 200)
+    drift = [f for f in detect(fr) if f["type"] == "supply_sensor_drift"]
+    assert [f["zone"] for f in drift] == [5]
+    assert "warmer than the rest" in drift[0]["detail"]
+
+
+def test_drift_is_capped():
+    b = Building(faults={5: "sensor_drift"})
+    for _ in range(500):
+        b.step()
+    v = b.values()
+    assert v["zone5.supply_air_temp"] - v["zone1.supply_air_temp"] < 6

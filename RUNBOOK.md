@@ -60,6 +60,10 @@ Each reading is one row: 72 rows every 5 s, about 1.2 million a day. Trim old da
 docker compose exec db psql -U sbc -c "delete from readings where ts < now() - interval '7 days';"
 ```
 
+**The agent describes odd history, like a value that "dropped"**
+Old readings from an earlier run are still in the database. Start clean with
+`docker compose down -v` then `docker compose up --build`.
+
 ## Change the faults
 
 Edit `FAULTS` in `.env` (for example `2:fan_off,4:high_co2`), then

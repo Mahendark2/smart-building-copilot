@@ -51,9 +51,9 @@ two minutes.
 | API | `sbc/api.py` | FastAPI. Latest values, history, zone summaries, faults. Keeps no state, so 3 copies run behind Nginx. |
 | Fault detection | `sbc/faults.py` | Rules for known faults, plus an Isolation Forest that flags zones that look unlike the rest. |
 | Assistant | `sbc/assistant.py` | Flask. Sends the question and 4 tools to the LLM, runs the tools it asks for, loops until it can answer (up to 6 steps). |
-| Dashboard | `web/` | React and Vite. Live zone cards, a fault list and a chat panel. A built copy is in `web/dist`. |
+| Dashboard | `web/` | React and Vite. A 3D model and a floor plan coloured by temperature, a demo panel to break a zone and time how fast it is detected, zone trends, a fault list and a chat panel that shows each tool the agent used. A built copy is in `web/dist`. |
 | Launcher | `run.py` | Starts everything on one port with SQLite, for running on a laptop. |
-| Tests | `tests/` | 15 Pytest tests, including the tool loop with a fake LLM. Run on SQLite and PostgreSQL in CI. |
+| Tests | `tests/` | 24 Pytest tests, including the tool loop with a fake LLM. Run on SQLite and PostgreSQL in CI. |
 
 ### The points
 
@@ -66,13 +66,14 @@ speed, fan status and occupancy. Zone `z` uses BACnet instances `z*100 + 1` to
 
 | Fault | How it is found |
 | --- | --- |
-| Stuck damper | Damper under 5% while the valve is over 80% open and the room is 1.5 C over setpoint |
+| Stuck damper | Damper under 5% while the valve is over 80% open and the room is 1 C over setpoint |
 | Fan off while occupied | Occupied but the fan is off for the whole window |
-| Supply sensor drift | Supply air rises over 0.5 C more than the building median across 30 readings, while the valve stays steady |
+| Supply sensor drift | Supply air rises over 0.5 C more than the building median across 30 readings, or sits over 2 C above it, while the valve stays steady |
 | High CO2 | Over 1000 ppm |
 | Unusual behaviour | Isolation Forest marks all of a zone's last 5 readings as outliers |
 
-Switch faults on with `FAULTS=3:stuck_damper,5:sensor_drift` (also `fan_off`, `high_co2`).
+Faults at start-up come from `FAULTS=3:stuck_damper,5:sensor_drift` (also `fan_off`, `high_co2`).
+While it runs, use **Break something** on the dashboard (or `PUT /api/demo/faults/{zone}` with `{"fault": "fan_off"}`, or `null` to fix it). The simulator picks the change up within a few seconds and the dashboard shows how long detection took.
 
 ## Run it with Docker
 

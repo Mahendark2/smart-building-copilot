@@ -41,3 +41,16 @@ def test_zone_summary(filled_db):
     r = client.get("/zones/3").json()
     assert r["values"]["damper_pos"] == 0
     assert any(f["type"] == "stuck_damper" for f in r["faults"])
+
+
+def test_demo_fault_round_trip(filled_db):
+    r = client.put("/demo/faults/2", json={"fault": "fan_off"})
+    assert r.status_code == 200
+    assert {"zone": 2, "fault": "fan_off"}.items() <= r.json()["faults"][0].items()
+    r = client.put("/demo/faults/2", json={"fault": None})
+    assert r.json()["faults"] == []
+
+
+def test_demo_fault_rejects_bad_input(filled_db):
+    assert client.put("/demo/faults/9", json={"fault": "fan_off"}).status_code == 404
+    assert client.put("/demo/faults/2", json={"fault": "on_fire"}).status_code == 422

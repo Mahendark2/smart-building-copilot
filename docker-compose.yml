@@ -18,6 +18,10 @@ services:
     environment:
       SIM_TICK: "2"
       FAULTS: ${FAULTS:-3:stuck_damper,5:sensor_drift}
+      DATABASE_URL: postgresql+psycopg2://sbc:sbc@db:5432/sbc
+    depends_on:
+      db:
+        condition: service_healthy
 
   gateway:
     build: .
